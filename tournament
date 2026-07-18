@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Football Tournament Manager</title>
+<style>
+  body { font-family: system-ui, Arial; background: #0a2a0a; color: white; margin: 0; padding: 20px; }
+  h1 { text-align: center; color: #ffd700; }
+.logo { text-align: center; margin: 10px; }
+.logo img { max-height: 120px; border-radius: 12px; margin: 5px; }
+.card { background: #123b12; padding: 15px; border-radius: 12px; margin-bottom: 20px; }
+  input, button, textarea { padding: 8px; margin: 5px; border-radius: 8px; border: none; }
+  textarea { height: 120px; font-family: monospace; width: 95%; }
+  button { background: #ffd700; color: #0a2a0a; font-weight: bold; cursor: pointer; }
+  button:hover { opacity: 0.9; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
+  th, td { border: 1px solid #2e7d32; padding: 6px; text-align: center; }
+.bracket { display: flex; justify-content: space-around; flex-wrap: wrap; gap: 15px; }
+.match { background: #1a4d1a; padding: 10px; border-radius: 8px; margin: 5px; min-width: 240px; }
+.podium { display: flex; justify-content: center; gap: 20px; margin-top: 20px; text-align: center; }
+.place { background: #1a4d1a; padding: 15px; border-radius: 12px; width: 180px; }
+.place img { width: 100px; height: 100px; object-fit: contain; }
+.gold { border: 3px solid gold; }
+.silver { border: 3px solid silver; }
+.bronze { border: 3px solid #cd7f32; }
+.readonly { opacity: 0.7; }
+.readonly input,.readonly button { display: none!important; }
+ #shareBox { background: #222; padding: 10px; border-radius: 8px; word-break: break-all; }
+.trophy-upload { display: flex; gap: 10px; justify-content: center; margin: 10px 0; }
+</style>
+</head>
+<body>
+
+<div class="logo">
+  <h1>⚽ Tournament Manager</h1>
+  <p>Upload Tournament Logo</p>
+  <input type="file" id="logoUpload" accept="image/*">
+  <div id="logoPreview"></div>
+
+  <p>Upload Trophy Images</p>
+  <div class="trophy-upload">
+    <div><label>1st</label><br><input type="file" id="cup1" accept="image/*"></div>
+    <div><label>2nd</label><br><input type="file" id="cup2" accept="image/*"></div>
+    <div><label>3rd</label><br><input type="file" id="cup3" accept="image/*"></div>
+  </div>
+</div>
+
+<div id="app">
+<div class="card" id="teamCard">
+  <h2>1. Add Teams - Bulk Paste</h2>
+  <textarea id="teamPaste" placeholder="1. Team Alpha
+2. Team Bravo
+3. Team Charlie"></textarea>
+  <button onclick="parseTeams()">Parse & Load Teams</button>
+  <button onclick="clearTeams()">Clear All</button>
+  <div id="teamList"></div>
+  <button onclick="generateGroups()">Generate Groups</button>
+</div>
+
+<div class="card" id="groupsCard" style="display:none">
+  <h2>2. Group Stage</h2>
+  <div id="groups"></div>
+  <button onclick="finishGroups()">Finish Group Stage → Generate QF</button>
+</div>
+
+<div class="card" id="qfCard" style="display:none">
+  <h2>3. Quarter Finals</h2>
+  <div id="qfMatches"></div>
+  <button onclick="generateSF()">Finish QF → Generate SF</button>
+</div>
+
+<div class="card" id="sfCard" style="display:none">
+  <h2>4. Semifinals</h2>
+  <div id="sfMatches"></div>
+  <button onclick="generateFinal()">Finish SF → Generate Final</button>
+</div>
+
+<div class="card" id="finalCard" style="display:none">
+  <h2>5. Final + 3rd Place</h2>
+  <div id="finalMatches"></div>
+  <button onclick="declareWinner()">Finish Tournament → Show Podium</button>
+</div>
+
+<div class="card" id="podiumCard" style="display:none">
+  <h2>🏆 Final Results</h2>
+  <div class="podium" id="podium"></div>
+</div>
+
+<div class="card">
+  <h2>6. Share Results - Read Only</h2>
+  <p>Copy this link. Viewers see scores but can't edit.</p>
+  <div id="shareBox"></div>
+  <button onclick="generateShareLink()">Generate Share Link</button>
+</div>
+</div>
+
+<script>
+let teams = JSON.parse(localStorage.getItem('teams')) || [];
+let groups = JSON.parse(localStorage.getItem('groups')) || [];
+let matches = JSON.parse(localStorage.getItem('matches')) || [];
+let qf = JSON.parse(localStorage.getItem('qf')) || [];
+let sf = JSON.parse(localStorage.getItem('sf')) || [];
+let final = JSON.parse(localStorage.getItem('final')) || [];
+let third = JSON.parse(localStorage.getItem('third')) || [];
+let trophies = JSON.parse(localStorage.getItem('trophies')) || {};
+let isReadOnly = false;
+
+// LOAD FROM URL
+const urlParams = new URLSearchParams(window.location.search);
+if(urlParams.has('d')) {
+  isReadOnly = true;
+  try {
+    const json = decodeURIComponent(escape(atob(urlParams.get('d'))));
+    const data = JSON.parse(json);
+    teams=data.teams; groups=data.groups; matches=data.matches; qf=data.qf; sf=data.sf; final=data.final; third=data.third; trophies=data.trophies||{};
+    document.getElementById('app').classList.add('readonly');
+    document.getElementById('teamCard').style.display='none';
+  } catch(e) { alert("Invalid link data") }
+}
+
+function save() {
+  localStorage.setItem('teams', JSON.stringify(teams));
+  localStorage.setItem('groups', JSON.stringify(groups));
+  localStorage.setItem('matches', JSON.stringify(matches));
+  localStorage.setItem('qf', JSON.stringify(qf));
+  localStorage.setItem('sf', JSON.stringify(sf));
+  localStorage.setItem('final', JSON.stringify(final));
+  localStorage.setItem('third', JSON.stringify(third));
+  localStorage.setItem('trophies', JSON.stringify(trophies));
+}
+
+// IMAGE UPLOADS
+function handleUpload(id, key) {
+  document.getElementById(id).onchange = e => {
+    const file = e.target.files[0];
+    if(file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        trophies[key] = reader.result;
+        save();
+        if(key==='logo') document.getElementById('logoPreview').innerHTML = `<img src="${reader.result}">`;
+      }
+      reader.readAsDataURL(file);
+    }
+  }
+}
+handleUpload('logoUpload','logo');
+handleUpload('cup1','cup1');
+handleUpload('cup2','cup2');
+handleUpload('cup3','cup3');
+
+if(trophies.logo) document.getElementById('logoPreview').innerHTML = `<img src="${trophies.logo}">`;
+
+function parseTeams() {
+  const text = document.getElementById('teamPaste').value;
+  teams = text.split('\n').map(line => line.replace(/^\d+\.\s*/, '').trim()).filter(x => x);
+  save(); renderTeams();
+  alert(teams.length + " teams loaded!");
+}
+
+function clearTeams() {
+  if(confirm("Delete all?")) {
+    teams = []; groups = []; matches = []; qf=[]; sf=[]; final=[]; third=[];
+    save(); renderTeams();
+    ['groupsCard','qfCard','sfCard','finalCard','podiumCard'].forEach(id => document.getElementById(id).style.display='none');
+  }
+}
+
+function renderTeams() {
+  document.getElementById('teamList').innerHTML =
+    teams.length? teams.map((t,i) => `${i+1}. ${t}`).join('<br>') : "No teams yet";
+}
+
+function generateGroups() {
+  if(teams.length < 4) return alert("Add at least 4 teams");
+  const groupSize = 4;
+  const numGroups = Math.ceil(teams.length / groupSize);
+  groups = [];
+  let shuffled = [...teams].sort(() => 0.5 - Math.random());
+  for(let i=0; i<numGroups; i++) {
+    groups.push({
+      name: `Group ${String.fromCharCode(65+i)}`,
+      teams: shuffled.slice(i*groupSize, (i+1)*groupSize).map(t => ({name: t, P:0, W:0, D:0, L:0, GF:0, GA:0, Pts:0}))
+    });
+  }
+  generateGroupMatches();
+  save(); renderGroups();
+  document.getElementById('groupsCard').style.display='block';
+}
+
+function generateGroupMatches() {
+  matches = [];
+  groups.forEach(g => {
+    for(let i=0; i<g.teams.length; i++) {
+      for(let j=i+1; j<g.teams.length; j++) {
+        matches.push({group: g.name, teamA: g.teams[i].name, teamB: g.teams[j].name, scoreA: '', scoreB: '', played: false});
+      }
+    }
+  });
+}
+
+function renderGroups() {
+  let html = '';
+  groups.forEach((g, gi) => {
+    html += `<h3>${g.name}</h3><table><tr><th>Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GD</th><th>Pts</th></tr>`;
+    g.teams.sort((a,b) => b.Pts - a.Pts || (b.GF-b.GA) - (a.GF-a.GA)).forEach(t => {
+      html += `<tr><td>${t.name}</td><td>${t.P}</td><td>${t.W}</td><td>${t.D}</td><td>${t.L}</td><td>${t.GF-t.GA}</td><td>${t.Pts}</td></tr>`;
+    });
+    html += `</table><h4>Fixtures</h4>`;
+    matches.filter(m => m.group === g.name).forEach((m, mi) => {
+      html += `<div class="match">${m.teamA}
+        <input type="number" id="a${gi}${mi}" value="${m.scoreA}" style="width:40px">
+        -
+        <input type="number" id="b${gi}${mi}" value="${m.scoreB}" style="width:40px">
+        ${m.teamB}
+        <button onclick="saveScore(${gi},${mi})">Save</button>
+      </div>`;
+    });
+  });
+  document.getElementById('groups').innerHTML = html;
+}
+
+function saveScore(gi, mi) {
+  if(isReadOnly) return;
+  const m = matches.filter(x => x.group === groups[gi].name)[mi];
+  m.scoreA = document.getElementById(`a${gi}${mi}`).value;
+  m.scoreB = document.getElementById(`b${gi}${mi}`).value;
+  m.played = m.scoreA!== '' && m.scoreB!== '';
+  updateStandings(); save(); renderGroups();
+}
+
+function updateStandings() {
+  groups.forEach(g => g.teams.forEach(t => Object.assign(t, {P:0,W:0,D:0,L:0,GF:0,GA:0,Pts:0})));
+  matches.filter(m => m.played).forEach(m => {
+    const g = groups.find(x => x.name === m.group);
+    const A = g.teams.find(t => t.name === m.teamA);
+    const B = g.teams.find(t => t.name === m.teamB);
+    const a = parseInt(m.scoreA), b = parseInt(m.scoreB);
+    A.P++; B.P++; A.GF+=a; A.GA+=b; B.GF+=b; B.GA+=a;
+    if(a>b){A.W++;A.Pts+=3;B.L++}
+    else if(a<b){B.W++;B.Pts+=3;A.L++}
+    else {A.D++;B.D++;A.Pts++;B.Pts++}
+  });
+}
+
+function finishGroups() {
+  let qualifiers = [];
+  let thirdPlaces = [];
+  groups.forEach(g => {
+    g.teams.sort((a,b) => b.Pts - a.Pts || (b.GF-b.GA) - (a.GF-a.GA));
+    qualifiers.push(g.teams[0].name, g.teams[1].name);
+    if(g.teams[2]) thirdPlaces.push(g.teams[2]);
+  });
+  thirdPlaces.sort((a,b) => b.Pts - a.Pts || (b.GF-b.GA) - (a.GF-a.GA));
+  while(qualifiers.length < 8 && thirdPlaces.length > 0) {
+    qualifiers.push(thirdPlaces.shift().name);
+  }
+  qf = [];
+  for(let i=0; i<8; i+=2) {
+    qf.push({teamA: qualifiers[i], teamB: qualifiers[i+1], scoreA: '', scoreB: '', played: false});
+  }
+  renderQF();
+  document.getElementById('qfCard').style.display='block';
+  save();
+}
+
+function renderQF() {
+  let html = '';
+  qf.forEach((m, i) => {
+    html += `<div class="match">QF${i+1}: ${m.teamA}
+      <input type="number" id="qfA${i}" value="${m.scoreA}" style="width:40px">
+      -
+      <input type="number" id="qfB${i}" value="${m.scoreB}" style="width:40px">
+      ${m.teamB}
+      <button onclick="saveQF(${i})">Save</button>
+    </div>`;
+  });
+  document.getElementById('qfMatches').innerHTML = html;
+}
+
+function saveQF(i) {
+  if(isReadOnly) return;
+  qf[i].scoreA = document.getElementById(`qfA${i}`).value;
+  qf[i].scoreB = document.getElementById(`qfB${i}`).value;
+  qf[i].played = qf[i].scoreA!== '' && qf[i].scoreB!== '';
+  save(); renderQF();
+}
+
+function generateSF() {
+  if(!qf.every(m => m.played)) return alert("Finish all QF matches first");
+  sf = [];
+  for(let i=0; i<4; i+=2) {
+    const winnerA = parseInt(qf[i].scoreA) > parseInt(qf[i].scoreB)? qf[i].teamA : qf[i].teamB;
+    const winnerB = parseInt(qf[i+1].scoreA) > parseInt(qf[i+1].scoreB)? qf[i+1].teamA : qf[i+1].teamB;
+    sf.push({teamA: winnerA, teamB: winnerB, scoreA: '', scoreB: '', played: false});
+  }
+  renderSF();
+  document.getElementById('sfCard').style.display='block';
+  save();
+}
+
+function renderSF() {
+  let html = '';
+  sf.forEach((m, i) => {
+    html += `<div class="match">SF${i+1}: ${m.teamA}
+      <input type="number" id="sfA${i}" value="${m.scoreA}" style="width:40px">
+      -
+      <input type="number" id="sfB${i}" value="${m.scoreB}" style="width:40px">
+      ${m.teamB}
+      <button onclick="saveSF(${i})">Save</button>
+    </div>`;
+  });
+  document.getElementById('sfMatches').innerHTML = html;
+}
+
+function saveSF(i) {
+  if(isReadOnly) return;
+  sf[i].scoreA = document.getElementById(`sfA${i}`).value;
+  sf[i].scoreB = document.getElementById(`sfB${i}`).value;
+  sf[i].played = sf[i].scoreA!== '' && sf[i].scoreB!== '';
+  save(); renderSF();
+}
+
+function generateFinal() {
+  if(!sf.every(m => m.played)) return alert("Finish all SF matches first");
+  const winnerA = parseInt(sf[0].scoreA) > parseInt(sf[0].scoreB)? sf[0].teamA : sf[0].teamB;
+  const loserA = parseInt(sf[0].scoreA) > parseInt(sf[0].scoreB)? sf[0].teamB : sf[0].teamA;
+  const winnerB = parseInt(sf[1].scoreA) > parseInt(sf[1].scoreB)? sf[1].teamA : sf[1].teamB;
+  const loserB = parseInt(sf[1].scoreA) > parseInt(sf[1].scoreB)? sf[1].teamB : sf[1].teamA;
+  final = [{teamA: winnerA, teamB: winnerB, scoreA: '', scoreB: '', played: false}];
+  third = [{teamA: loserA, teamB: loserB, scoreA: '', scoreB: '', played: false}];
+  let html = `<div class="match">3rd Place: ${third[0].teamA}
+    <input type="number" id="tA" value="${third[0].scoreA}" style="width:40px"> -
+    <input type="number" id="tB" value="${third[0].scoreB}" style="width:40px"> ${third[0].teamB}
+    <button onclick="saveThird()">Save</button>
+  </div>`;
+  html += `<div class="match">FINAL: ${final[0].teamA}
+    <input type="number" id="fA" value="${final[0].scoreA}" style="width:40px"> -
+    <input type="number" id="fB" value="${final[0].scoreB}" style="width:40px"> ${final[0].teamB}
+    <button onclick="saveFinal()">Save</button>
+  </div>`;
+  document.getElementById('finalMatches').innerHTML = html;
+  document.getElementById('finalCard').style.display='block';
+  save();
+}
+
+function saveFinal() {
+  if(isReadOnly) return;
+  final[0].scoreA = document.getElementById('fA').value;
+  final[0].scoreB = document.getElementById('fB').value;
+  final[0].played = final[0].scoreA!== '' && final[0].scoreB!== '';
+  save();
+}
+function saveThird() {
+  if(isReadOnly) return;
+  third[0].scoreA = document.getElementById('tA').value;
+  third[0].scoreB = document.getElementById('tB').value;
+  third[0].played = third[0].scoreA!== '' && third[0].scoreB!== '';
+  save();
+}
+
+function declareWinner() {
+  if(!final[0].played ||!third[0].played) return alert("Finish Final and 3rd place first");
+  const winner = parseInt(final[0].scoreA) > parseInt(final[0].scoreB)? final[0].teamA : final[0].teamB;
+  const second = parseInt(final[0].scoreA) > parseInt(final[0].scoreB)? final[0].teamB : final[0].teamA;
+  const thirdPlace = parseInt(third[0].scoreA) > parseInt(third[0].scoreB)? third[0].teamA : third[0].teamB;
+
+  document.getElementById('podium').innerHTML = `
+    <div class="place silver"><img src="${trophies.cup2||''}"><h3>2nd</h3><p>${second}</p></div>
+    <div class="place gold"><img src="${trophies.cup1||''}"><h3>1st</h3><p>${winner}</p></div>
+    <div class="place bronze"><img src="${trophies.cup3||''}"><h3>3rd</h3><p>${thirdPlace}</p></div>
+  `;
+  document.getElementById('podiumCard').style.display='block';
+}
+
+// FIXED SHARE LINK
+function generateShareLink() {
+  const data = {teams, groups, matches, qf, sf, final, third, trophies};
+  const json = unescape(encodeURIComponent(JSON.stringify(data)));
+  const compressed = btoa(json);
+  const link = window.location.origin + window.location.pathname + "?d=" + compressed;
+  document.getElementById('shareBox').innerHTML = `<a href="${link}" target="_blank">${link}</a>`;
+  navigator.clipboard.writeText(link);
+  alert("Link copied! Send this to anyone.");
+}
+
+renderTeams();
+if(groups.length > 0) { renderGroups(); document.getElementById('groupsCard').style.display='block'; }
+if(qf.length > 0) { renderQF(); document.getElementById('qfCard').style.display='block'; }
+if(sf.length > 0) { renderSF(); document.getElementById('sfCard').style.display='block'; }
+if(final.length > 0) { generateFinal(); }
+</script>
+</body>
+</html>
