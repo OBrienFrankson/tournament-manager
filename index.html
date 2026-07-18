@@ -174,7 +174,7 @@ function renderTeams() {
 
 function generateGroups() {
   if(teams.length < 4) return alert("Add at least 4 teams");
-  const groupSize = 4;
+  const groupSize = 3;
   const numGroups = Math.ceil(teams.length / groupSize);
   groups = [];
   let shuffled = [...teams].sort(() => 0.5 - Math.random());
